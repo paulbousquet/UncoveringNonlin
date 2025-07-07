@@ -65,3 +65,10 @@ se_size = sqrt(var_size_base+var_size_correction)
 
 ```
 
+## Visualizing Weights 
+
+If you want to see what the weights look like for your functions `f1,...,fk`, you can use the custom program `regrweight.ado` available in this repo. Simply enter the shock series followed by the functions 
+```
+regrweight mp1 ii1 ii2 ii3 ii4
+```
+For more details, see the paper as well as [Kolesár and Plagborg-Møller (2025)](https://www.mikkelpm.com/files/nonlinear_causal.pdf)
