@@ -127,6 +127,7 @@ program define regrweight
         local plot_cmd "`plot_cmd' title("Weight on x{sub:t} in {&beta}{sub:`i'}", size(medium))"
         local plot_cmd "`plot_cmd' xtitle("x{sub:t}", size(small)) ytitle("", size(small)) "
         local plot_cmd "`plot_cmd' graphregion(fcolor(255 255 255)) plotregion(fcolor(255 255 255)) "
+        local plot_cmd "`plot_cmd' aspectratio(0.6) "
         local plot_cmd "`plot_cmd' name(plot_`i', replace) nodraw"
         
         quietly `plot_cmd'
