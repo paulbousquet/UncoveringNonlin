@@ -124,7 +124,6 @@ program define regrweight
         * Create plot
         local plot_cmd "line coef level, connect(stairstep) lwidth(thick) lcolor(black)"
         local plot_cmd "`plot_cmd' yline(0, lcolor(black) lpattern(dash) lwidth(thin)) "
-        local plot_cmd "`plot_cmd' xline(-2 0, lcolor(gray) lpattern(dash) lwidth(thin)) "
         local plot_cmd "`plot_cmd' title("Weight on x{sub:t} in {&beta}{sub:`i'}", size(medium))"
         local plot_cmd "`plot_cmd' xtitle("x{sub:t}", size(small)) ytitle("", size(small)) "
         local plot_cmd "`plot_cmd' graphregion(fcolor(255 255 255)) plotregion(fcolor(255 255 255)) "
