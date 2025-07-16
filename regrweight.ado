@@ -5,43 +5,49 @@ capture program drop regrweight
 program define regrweight
     version 14.0
     
-    * Parse arguments
     gettoken shock features : 0
+	unab features : `features'
     local k : word count `features'
     
+	
     * Check number of features
     if `k' == 0 {
         di as error "Error: At least one feature variable must be specified"
         exit 198
     }
-    if `k' >= 7 {
-        di as error "Error: Maximum 6 feature variables allowed"
-        exit 198
+	local plotfeat `features'
+    if `k' >= 10 {
+        di "Only first 9 will be plotted"
+		local k = 9
+		local plotfeat 
+		forvalues i=1/9 {
+			local fine : word `i' of `features'
+			local plotfeat `plotfeat' `fine'
+		}
+
     }
+	
+	
     
-    * Preserve data
     preserve
     
-    * Keep only necessary variables and complete cases
+    * allign obs with actual regression 
     keep `shock' `features'
     quietly keep if !missing(`shock')
     foreach var of local features {
         quietly keep if !missing(`var')
     }
-    
-    * Get unique levels of shock variable and extend
-    quietly levelsof `shock', local(levels)
+	
+	sort `shock'
+	
+
     quietly summarize `shock'
-    local min_level = r(min) - 0.01
-    local max_level = r(max) + 0.01
-    local extended_levels "`min_level' `levels' `max_level'"
+    local min_x = r(min) - 0.01
+    local max_x = r(max) + 0.01
     
-    * Count number of levels for progress reporting
-    local n_levels : word count `extended_levels'
-    
-    * Loop through each feature
-    local feat_num = 0
-    foreach target_var of local features {
+	
+	local feat_num = 0
+    foreach target_var of local plotfeat {
         local feat_num = `feat_num' + 1
         di as text _n "Processing feature `feat_num' of `k': `target_var'"
         
@@ -53,42 +59,27 @@ program define regrweight
             }
         }
         
-        * First regression: target feature on all other features (with constant)
+        * FWL
         quietly reg `target_var' `other_features'
         quietly predict residuals_`feat_num', residuals
-        
-        * Create temporary file for results
+		        
         tempfile results_`feat_num'
         quietly postfile handle_`feat_num' level coef using `results_`feat_num'', replace
-        
-        
-        * Loop through each threshold level
-        foreach lev of local extended_levels {
+		
+		mata: twirl("`shock'", "residuals_`feat_num'", `max_x', `min_x',"handle_`feat_num'")
 
-            * Create indicator variable (shock >= threshold)
-            quietly gen byte indicator = (`shock' >= `lev')
-            
-            * Regression of indicator on constant and residuals
-            quietly reg indicator residuals_`feat_num'
-            
-            * Post the coefficient on residuals
-            quietly post handle_`feat_num' (`lev') (_b[residuals_`feat_num'])
-            
-            * Drop indicator
-            quietly drop indicator
-        }
-        
-        * Close postfile
-        quietly postclose handle_`feat_num'
+		
+		quietly postclose handle_`feat_num'
         
         * Drop residuals
         quietly drop residuals_`feat_num'
-    }
+		
+		
+	}
+	
     
-    * Restore original data
     restore
     
-    * Create plots
     di as text _n "Creating plots..."
     
     * Determine subplot layout
@@ -112,16 +103,18 @@ program define regrweight
         local rows = 2
         local cols = 3
     }
+	else if `k' > 7 {
+		local rows = 3
+		local cols = 3
+	}
     
     * Create individual plots and combine
     local plot_list ""
     forvalues i = 1/`k' {
         preserve
         
-        * Load results
         quietly use `results_`i'', clear
         
-        * Create plot
         local plot_cmd "line coef level, connect(stairstep) lwidth(thick) lcolor(black)"
         local plot_cmd "`plot_cmd' yline(0, lcolor(black) lpattern(dash) lwidth(thin)) "
         local plot_cmd "`plot_cmd' title("Weight on x{sub:t} in {&beta}{sub:`i'}", size(medium))"
@@ -136,7 +129,6 @@ program define regrweight
         restore
     }
     
-    * Combine plots
     if `k' == 1 {
         graph display plot_1
     }
@@ -147,3 +139,60 @@ program define regrweight
     }
     
 end
+
+mata: 
+
+void function twirl( string scalar xvar,
+		     string scalar residvar,
+		     real scalar xmax,
+		     real scalar xmin,
+			 string scalar handle_name) {
+	 x = st_data(., xvar)
+     resid = st_data(., residvar)
+	 n = rows(x)
+    
+    unique_x = J(0, 1, .)
+    unique_pos = J(0, 1, .)  
+    last_x = .
+    
+    for (i = 1; i <= n; i++) {
+        if (x[i] != last_x) {
+            unique_x = unique_x \ x[i]
+            unique_pos = unique_pos \ i
+            last_x = x[i]
+        }
+    }
+    
+    // Add extended values
+    unique_x = xmin \ unique_x \ xmax
+    unique_pos = 1 \ unique_pos \ (n + 1) 
+    k = rows(unique_x)
+    
+    // Exploting univariate OLS for efficency 
+    cumsum_resid = runningsum(resid)
+    total_sum = cumsum_resid[n]
+    
+    var_resid = variance(resid)
+    
+    for (j = 1; j <= k; j++) {
+        pos = unique_pos[j]
+        
+        if (pos == 1) {
+            sum_resid_above = total_sum
+            n_above = n
+        } else if (pos > n) {
+            sum_resid_above = 0
+            n_above = 0
+        } else {
+            sum_resid_above = total_sum - cumsum_resid[pos - 1]
+            n_above = n - pos + 1
+        }
+
+        coef = (sum_resid_above / n) / var_resid
+        
+        stata(sprintf("post %s (%f) (%f)", handle_name, unique_x[j], coef))
+    }
+			 }
+
+
+end 
